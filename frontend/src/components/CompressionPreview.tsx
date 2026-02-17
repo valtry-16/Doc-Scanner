@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import Image from 'next/image';
+import { useEffect, useRef, useState } from 'react';
 
 interface CompressionPreviewProps {
   file: File | null;
@@ -14,71 +13,102 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
   const [originalSize, setOriginalSize] = useState<number>(0);
   const [compressedSize, setCompressedSize] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const originalUrlRef = useRef<string | null>(null);
+  const compressedUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!file) {
       setOriginalPreview('');
       setCompressedPreview('');
+      setOriginalSize(0);
+      setCompressedSize(0);
+      setIsProcessing(false);
+      if (originalUrlRef.current) {
+        URL.revokeObjectURL(originalUrlRef.current);
+        originalUrlRef.current = null;
+      }
+      if (compressedUrlRef.current) {
+        URL.revokeObjectURL(compressedUrlRef.current);
+        compressedUrlRef.current = null;
+      }
       return;
     }
 
-    // Only process image files
     if (!file.type.startsWith('image/')) {
       return;
     }
 
-    // Set original preview
     const originalUrl = URL.createObjectURL(file);
     setOriginalPreview(originalUrl);
     setOriginalSize(file.size);
+    if (originalUrlRef.current) {
+      URL.revokeObjectURL(originalUrlRef.current);
+    }
+    originalUrlRef.current = originalUrl;
+  }, [file]);
 
-    // Generate compressed preview
-    generateCompressedPreview(file, quality);
+  useEffect(() => {
+    if (!file || !file.type.startsWith('image/')) {
+      return;
+    }
 
-    return () => {
-      URL.revokeObjectURL(originalUrl);
-    };
-  }, [file, quality]);
-
-  const generateCompressedPreview = async (file: File, quality: number) => {
+    let cancelled = false;
     setIsProcessing(true);
 
-    try {
-      const img = new window.Image();
-      img.src = URL.createObjectURL(file);
+    const img = new window.Image();
+    const imgUrl = URL.createObjectURL(file);
+    img.src = imgUrl;
 
-      await new Promise((resolve) => {
-        img.onload = resolve;
-      });
+    img.onload = () => {
+      if (cancelled) return;
 
-      // Create canvas
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
 
       const ctx = canvas.getContext('2d');
-      if (!ctx) return;
+      if (!ctx) {
+        setIsProcessing(false);
+        URL.revokeObjectURL(imgUrl);
+        return;
+      }
 
       ctx.drawImage(img, 0, 0);
 
-      // Convert to blob with quality setting
       canvas.toBlob(
         (blob) => {
+          if (cancelled) return;
           if (blob) {
-            const url = URL.createObjectURL(blob);
-            setCompressedPreview(url);
+            const newUrl = URL.createObjectURL(blob);
+            setCompressedPreview(newUrl);
             setCompressedSize(blob.size);
+            if (compressedUrlRef.current) {
+              URL.revokeObjectURL(compressedUrlRef.current);
+            }
+            compressedUrlRef.current = newUrl;
+          } else {
+            setCompressedPreview('');
+            setCompressedSize(0);
           }
           setIsProcessing(false);
         },
         file.type,
         quality / 100
       );
-    } catch (error) {
-      console.error('Error generating preview:', error);
+
+      URL.revokeObjectURL(imgUrl);
+    };
+
+    img.onerror = () => {
+      if (cancelled) return;
       setIsProcessing(false);
-    }
-  };
+      URL.revokeObjectURL(imgUrl);
+    };
+
+    return () => {
+      cancelled = true;
+    };
+  }, [file, quality]);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
