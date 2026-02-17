@@ -1,14 +1,11 @@
 services:
   - type: web
     name: document-processor-api
-    env: python
+    env: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: ./
     region: oregon  # Choose: oregon, frankfurt, singapore, ohio, etc.
     plan: free  # Change to 'starter' for production (always-on, $7/mo)
-    buildCommand: |
-      apt-get update
-      apt-get install -y tesseract-ocr tesseract-ocr-eng poppler-utils libpoppler-cpp-dev
-      pip install --no-cache-dir -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
     healthCheckPath: /health
     envVars:
       - key: UPLOAD_DIR
