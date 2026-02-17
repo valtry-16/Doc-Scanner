@@ -16,6 +16,7 @@ export function usePolling({
 }: UsePollingOptions) {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const enabledRef = useRef(enabled);
+  const inFlightRef = useRef(false);
 
   useEffect(() => {
     enabledRef.current = enabled;
@@ -34,12 +35,19 @@ export function usePolling({
     stopPolling();
 
     // Immediate first poll
-    onPoll().then((result) => {
-      if (shouldStop && shouldStop(result)) {
-        stopPolling();
-        return;
-      }
-    });
+    if (!inFlightRef.current) {
+      inFlightRef.current = true;
+      onPoll()
+        .then((result) => {
+          if (shouldStop && shouldStop(result)) {
+            stopPolling();
+            return;
+          }
+        })
+        .finally(() => {
+          inFlightRef.current = false;
+        });
+    }
 
     // Set up interval
     intervalRef.current = setInterval(async () => {
@@ -48,9 +56,18 @@ export function usePolling({
         return;
       }
 
-      const result = await onPoll();
-      if (shouldStop && shouldStop(result)) {
-        stopPolling();
+      if (inFlightRef.current) {
+        return;
+      }
+
+      inFlightRef.current = true;
+      try {
+        const result = await onPoll();
+        if (shouldStop && shouldStop(result)) {
+          stopPolling();
+        }
+      } finally {
+        inFlightRef.current = false;
       }
     }, interval);
   }, [interval, onPoll, shouldStop, stopPolling]);
