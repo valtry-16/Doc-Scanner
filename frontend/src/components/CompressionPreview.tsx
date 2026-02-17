@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { API_BASE_URL } from '@/utils/constants';
 
 interface CompressionPreviewProps {
   file: File | null;
@@ -13,8 +14,14 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
   const [originalSize, setOriginalSize] = useState<number>(0);
   const [compressedSize, setCompressedSize] = useState<number>(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [serverEstimatedSize, setServerEstimatedSize] = useState<number | null>(null);
+  const [serverEstimatedSavings, setServerEstimatedSavings] = useState<number | null>(null);
+  const [serverEstimatedPercent, setServerEstimatedPercent] = useState<number | null>(null);
+  const [serverEstimating, setServerEstimating] = useState(false);
   const originalUrlRef = useRef<string | null>(null);
   const compressedUrlRef = useRef<string | null>(null);
+  const estimateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const estimateAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!file) {
@@ -22,6 +29,10 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
       setCompressedPreview('');
       setOriginalSize(0);
       setCompressedSize(0);
+      setServerEstimatedSize(null);
+      setServerEstimatedSavings(null);
+      setServerEstimatedPercent(null);
+      setServerEstimating(false);
       setIsProcessing(false);
       if (originalUrlRef.current) {
         URL.revokeObjectURL(originalUrlRef.current);
@@ -110,6 +121,65 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
     };
   }, [file, quality]);
 
+  useEffect(() => {
+    if (!file || !file.type.startsWith('image/')) {
+      return;
+    }
+
+    if (estimateTimeoutRef.current) {
+      clearTimeout(estimateTimeoutRef.current);
+    }
+
+    if (estimateAbortRef.current) {
+      estimateAbortRef.current.abort();
+    }
+
+    setServerEstimating(true);
+    estimateTimeoutRef.current = setTimeout(async () => {
+      const controller = new AbortController();
+      estimateAbortRef.current = controller;
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('quality', quality.toString());
+
+        const response = await fetch(`${API_BASE_URL}/api/compress/estimate`, {
+          method: 'POST',
+          body: formData,
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          setServerEstimating(false);
+          return;
+        }
+
+        const data = await response.json();
+        setServerEstimatedSize(data.estimated_size ?? null);
+        setServerEstimatedSavings(data.estimated_savings ?? null);
+        setServerEstimatedPercent(data.estimated_savings_percent ?? null);
+      } catch (error) {
+        if ((error as any).name !== 'AbortError') {
+          setServerEstimatedSize(null);
+          setServerEstimatedSavings(null);
+          setServerEstimatedPercent(null);
+        }
+      } finally {
+        setServerEstimating(false);
+      }
+    }, 300);
+
+    return () => {
+      if (estimateTimeoutRef.current) {
+        clearTimeout(estimateTimeoutRef.current);
+      }
+      if (estimateAbortRef.current) {
+        estimateAbortRef.current.abort();
+      }
+    };
+  }, [file, quality]);
+
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -118,11 +188,13 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const savingsPercent = originalSize > 0 
-    ? Math.round(((originalSize - compressedSize) / originalSize) * 100) 
-    : 0;
-  const estimatedFinalSize = compressedSize > 0 ? formatFileSize(compressedSize) : '...';
-  const estimatedSavings = compressedSize > 0 ? formatFileSize(originalSize - compressedSize) : '...';
+  const effectiveEstimatedSize = serverEstimatedSize ?? compressedSize;
+  const effectiveEstimatedSavings = serverEstimatedSavings ?? (originalSize - compressedSize);
+  const effectiveEstimatedPercent = serverEstimatedPercent ?? (
+    originalSize > 0 ? Math.round(((originalSize - compressedSize) / originalSize) * 100) : 0
+  );
+  const estimatedFinalSize = effectiveEstimatedSize > 0 ? formatFileSize(effectiveEstimatedSize) : '...';
+  const estimatedSavings = effectiveEstimatedSavings > 0 ? formatFileSize(effectiveEstimatedSavings) : '...';
 
   if (!file || !file.type.startsWith('image/')) {
     return null;
@@ -136,7 +208,10 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-sm font-medium text-gray-700">Quality: {quality}%</span>
           <span className="text-sm text-gray-600">Estimated final size: {estimatedFinalSize}</span>
-          <span className="text-sm text-gray-600">Estimated savings: {estimatedSavings} ({savingsPercent}%)</span>
+          <span className="text-sm text-gray-600">Estimated savings: {estimatedSavings} ({effectiveEstimatedPercent}%)</span>
+        </div>
+        <div className="mt-2 text-xs text-gray-500">
+          {serverEstimating ? 'Calculating server estimate...' : 'Server estimate used when available'}
         </div>
       </div>
       
@@ -181,14 +256,14 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
       </div>
 
       {/* Savings Info */}
-      {compressedSize > 0 && (
+      {effectiveEstimatedSize > 0 && (
         <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-green-800">
               Estimated Savings:
             </span>
             <span className="text-lg font-bold text-green-600">
-              {savingsPercent}%
+              {effectiveEstimatedPercent}%
             </span>
           </div>
           <div className="mt-1 text-xs text-green-700">
@@ -198,7 +273,7 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
       )}
 
       <div className="mt-3 text-xs text-gray-500 italic">
-        Note: This is a browser preview. Actual server compression may differ slightly.
+        Note: Preview image is browser-generated. Size estimates use server compression when available.
       </div>
     </div>
   );

@@ -39,12 +39,8 @@ export default function ConvertPage() {
   const handleUpload = async () => {
     if (files.length === 0) return;
 
-    // Manually call upload since we need to pass targetFormat
-    const formData = new FormData();
-    files.forEach((file) => formData.append('files', file));
-    
     try {
-      const response = await uploadForConvert(files, options.targetFormat);
+      const response = await uploadForConvert(files, options);
       setJobId(response.job_id);
     } catch (err: any) {
       // Error handled by useUpload
@@ -78,12 +74,17 @@ export default function ConvertPage() {
                 files={files} 
                 onFilesChange={setFiles} 
                 multiple={true}
-                acceptMessage="📷 Images only: JPG, PNG, WebP (Max 25 MB)"
+                acceptMessage="📷 Images and PDFs: JPG, PNG, WebP, PDF (Max 25 MB)"
               />
             </div>
 
             {files.length > 0 && (
-              <FeatureSelector feature="convert" onOptionsChange={setOptions} />
+              <FeatureSelector
+                feature="convert"
+                onOptionsChange={(nextOptions) =>
+                  setOptions((prev: any) => ({ ...prev, ...nextOptions }))
+                }
+              />
             )}
 
             {files.length > 0 && (

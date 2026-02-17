@@ -1,6 +1,6 @@
 from PIL import Image
 import os
-from typing import Tuple
+from typing import Tuple, Optional
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 try:
@@ -45,7 +45,41 @@ def compress_image(input_path: str, output_path: str, quality: int = 85) -> Tupl
         return False, f"Failed to compress image: {str(e)}"
 
 
-def convert_image(input_path: str, output_path: str, target_format: str) -> Tuple[bool, str]:
+def resize_pil_image(
+    img: Image.Image,
+    width: Optional[int],
+    height: Optional[int],
+    keep_aspect: bool
+) -> Image.Image:
+    if not width and not height:
+        return img
+
+    if keep_aspect:
+        if width and height:
+            img.thumbnail((width, height), Image.LANCZOS)
+            return img
+        if width:
+            ratio = width / img.width
+            new_height = max(1, int(img.height * ratio))
+            return img.resize((width, new_height), Image.LANCZOS)
+        ratio = height / img.height
+        new_width = max(1, int(img.width * ratio))
+        return img.resize((new_width, height), Image.LANCZOS)
+
+    if not width or not height:
+        return img
+
+    return img.resize((width, height), Image.LANCZOS)
+
+
+def convert_image(
+    input_path: str,
+    output_path: str,
+    target_format: str,
+    resize_width: Optional[int] = None,
+    resize_height: Optional[int] = None,
+    keep_aspect: bool = True
+) -> Tuple[bool, str]:
     """
     Convert an image to a different format
     
@@ -60,9 +94,16 @@ def convert_image(input_path: str, output_path: str, target_format: str) -> Tupl
     try:
         # Handle PDF conversion separately
         if target_format.lower() == 'pdf':
-            return image_to_pdf(input_path, output_path)
+            return image_to_pdf(
+                input_path,
+                output_path,
+                resize_width=resize_width,
+                resize_height=resize_height,
+                keep_aspect=keep_aspect
+            )
         
         with Image.open(input_path) as img:
+            img = resize_pil_image(img, resize_width, resize_height, keep_aspect)
             # Convert RGBA to RGB for JPEG
             if target_format.lower() in ['jpg', 'jpeg'] and img.mode == 'RGBA':
                 img = img.convert('RGB')
@@ -82,7 +123,13 @@ def convert_image(input_path: str, output_path: str, target_format: str) -> Tupl
         return False, f"Failed to convert image: {str(e)}"
 
 
-def image_to_pdf(input_path: str, output_path: str) -> Tuple[bool, str]:
+def image_to_pdf(
+    input_path: str,
+    output_path: str,
+    resize_width: Optional[int] = None,
+    resize_height: Optional[int] = None,
+    keep_aspect: bool = True
+) -> Tuple[bool, str]:
     """
     Convert an image to PDF format
     
@@ -95,6 +142,7 @@ def image_to_pdf(input_path: str, output_path: str) -> Tuple[bool, str]:
     """
     try:
         with Image.open(input_path) as img:
+            img = resize_pil_image(img, resize_width, resize_height, keep_aspect)
             # Convert RGBA to RGB
             if img.mode == 'RGBA':
                 img = img.convert('RGB')
@@ -106,7 +154,7 @@ def image_to_pdf(input_path: str, output_path: str) -> Tuple[bool, str]:
             c = canvas.Canvas(output_path, pagesize=(img_width, img_height))
             
             # Draw image on PDF
-            c.drawImage(input_path, 0, 0, width=img_width, height=img_height)
+            c.drawImage(ImageReader(img), 0, 0, width=img_width, height=img_height)
             c.save()
         
         return True, "Image converted to PDF"
@@ -137,7 +185,15 @@ def get_image_info(image_path: str) -> dict:
         return {"error": str(e)}
 
 
-def pdf_to_images(input_path: str, output_dir: str, target_format: str = 'jpg', dpi: int = 200) -> Tuple[bool, str, list]:
+def pdf_to_images(
+    input_path: str,
+    output_dir: str,
+    target_format: str = 'jpg',
+    dpi: int = 200,
+    resize_width: Optional[int] = None,
+    resize_height: Optional[int] = None,
+    keep_aspect: bool = True
+) -> Tuple[bool, str, list]:
     """
     Convert PDF pages to images
     
@@ -161,6 +217,7 @@ def pdf_to_images(input_path: str, output_dir: str, target_format: str = 'jpg', 
         base_name = os.path.splitext(os.path.basename(input_path))[0]
         
         for i, image in enumerate(images):
+            image = resize_pil_image(image, resize_width, resize_height, keep_aspect)
             # For single page PDFs, don't add page number
             if len(images) == 1:
                 output_filename = f"{base_name}.{target_format}"

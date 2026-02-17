@@ -68,7 +68,14 @@ def compress_images_task(job_id: str, file_paths: list, quality: int = 85):
         set_job_error(job_id, str(e))
 
 
-def convert_images_task(job_id: str, file_paths: list, target_format: str):
+def convert_images_task(
+    job_id: str,
+    file_paths: list,
+    target_format: str,
+    resize_width: int = None,
+    resize_height: int = None,
+    keep_aspect: bool = True
+):
     """
     Convert images/PDFs to target format
     
@@ -94,7 +101,10 @@ def convert_images_task(job_id: str, file_paths: list, target_format: str):
                 success, message, pdf_output_files = pdf_to_images(
                     file_path, 
                     output_dir, 
-                    target_format
+                    target_format,
+                    resize_width=resize_width,
+                    resize_height=resize_height,
+                    keep_aspect=keep_aspect
                 )
                 
                 if success:
@@ -109,7 +119,14 @@ def convert_images_task(job_id: str, file_paths: list, target_format: str):
                 output_filename = f"{base_name}.{target_format}"
                 output_path = get_output_path(job_id, output_filename)
                 
-                success, message = convert_image(file_path, output_path, target_format)
+                success, message = convert_image(
+                    file_path,
+                    output_path,
+                    target_format,
+                    resize_width=resize_width,
+                    resize_height=resize_height,
+                    keep_aspect=keep_aspect
+                )
                 
                 if success:
                     output_files.append(output_filename)

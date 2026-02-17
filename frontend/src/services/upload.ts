@@ -29,13 +29,29 @@ export async function uploadForCompress(files: File[], quality: number = 85): Pr
  */
 export async function uploadForConvert(
   files: File[],
-  targetFormat: string
+  options: {
+    targetFormat: string;
+    resizeEnabled?: boolean;
+    resizeWidth?: number | null;
+    resizeHeight?: number | null;
+    keepAspect?: boolean;
+  }
 ): Promise<UploadResponse> {
   const formData = new FormData();
   files.forEach((file) => {
     formData.append('files', file);
   });
-  formData.append('target_format', targetFormat);
+  formData.append('target_format', options.targetFormat);
+
+  if (options.resizeEnabled) {
+    if (options.resizeWidth) {
+      formData.append('resize_width', options.resizeWidth.toString());
+    }
+    if (options.resizeHeight) {
+      formData.append('resize_height', options.resizeHeight.toString());
+    }
+    formData.append('keep_aspect', String(options.keepAspect !== false));
+  }
 
   const response = await api.post<UploadResponse>('/api/convert', formData, {
     headers: {

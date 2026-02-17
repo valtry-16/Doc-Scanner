@@ -81,7 +81,12 @@ export default function CompressPage() {
             </div>
             
             {files.length > 0 && (
-              <FeatureSelector feature="compress" onOptionsChange={setOptions} />
+              <FeatureSelector
+                feature="compress"
+                onOptionsChange={(nextOptions) =>
+                  setOptions((prev: any) => ({ ...prev, ...nextOptions }))
+                }
+              />
             )}
             
             {files.length > 0 && files[0] && (

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from typing import List, Optional
+from io import BytesIO
+from PIL import Image
 import uuid
 from core.validators import validate_upload_file
 from core.temp_storage import save_upload_files, create_job_directory
@@ -10,6 +12,65 @@ from workers.image_worker import compress_images_task
 from workers.pdf_worker import compress_pdfs_task
 
 router = APIRouter()
+
+
+@router.post("/compress/estimate")
+async def estimate_compression(
+    file: UploadFile = File(...),
+    quality: Optional[int] = Form(85)
+):
+    """
+    Estimate compressed size for an image without storing output.
+    """
+    if not file:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    if quality < 50 or quality > 100:
+        raise HTTPException(status_code=400, detail="Quality must be between 50 and 100")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="Empty file")
+
+    content_type = file.content_type or ''
+    filename = file.filename or ''
+    ext = filename.split('.')[-1].lower() if '.' in filename else ''
+
+    is_image = content_type.startswith('image/') or ext in ['jpg', 'jpeg', 'png', 'webp']
+    if not is_image:
+        raise HTTPException(status_code=400, detail="Only image files are supported for estimation")
+
+    try:
+        with Image.open(BytesIO(data)) as img:
+            if img.mode == 'RGBA':
+                img = img.convert('RGB')
+
+            output = BytesIO()
+            fmt = (img.format or '').upper()
+
+            if ext in ['jpg', 'jpeg'] or fmt == 'JPEG':
+                img.save(output, format='JPEG', quality=quality, optimize=True)
+            elif ext == 'png' or fmt == 'PNG':
+                img.save(output, format='PNG', optimize=True, compress_level=9)
+            elif ext == 'webp' or fmt == 'WEBP':
+                img.save(output, format='WEBP', quality=quality)
+            else:
+                img.save(output, format='JPEG', quality=quality, optimize=True)
+
+            estimated_size = output.tell()
+
+        original_size = len(data)
+        savings = max(0, original_size - estimated_size)
+        savings_percent = (savings / original_size * 100) if original_size > 0 else 0
+
+        return {
+            "original_size": original_size,
+            "estimated_size": estimated_size,
+            "estimated_savings": savings,
+            "estimated_savings_percent": round(savings_percent, 1)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Estimate failed: {str(e)}")
 
 
 @router.post("/compress")

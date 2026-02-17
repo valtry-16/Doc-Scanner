@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from typing import List
+from typing import List, Optional
 import uuid
 from core.validators import validate_upload_file
 from core.temp_storage import save_upload_files, create_job_directory
@@ -15,7 +15,10 @@ router = APIRouter()
 @router.post("/convert")
 async def convert_files(
     files: List[UploadFile] = File(...),
-    target_format: str = Form(...)
+    target_format: str = Form(...),
+    resize_width: Optional[int] = Form(None),
+    resize_height: Optional[int] = Form(None),
+    keep_aspect: Optional[bool] = Form(True)
 ):
     """
     Convert uploaded images/PDFs to target format
@@ -36,6 +39,14 @@ async def convert_files(
             detail=f"Unsupported target format. Supported: {', '.join(supported_formats)}"
         )
     
+    # Validate resize options
+    if resize_width is not None and resize_width <= 0:
+        raise HTTPException(status_code=400, detail="Resize width must be greater than 0")
+    if resize_height is not None and resize_height <= 0:
+        raise HTTPException(status_code=400, detail="Resize height must be greater than 0")
+    if keep_aspect is False and (resize_width is None or resize_height is None):
+        raise HTTPException(status_code=400, detail="Provide both width and height when aspect ratio is unlocked")
+
     # Validate file types - both images and PDFs are allowed
     for file in files:
         logger.info(f"Validating file: {file.filename}, content_type: {file.content_type}")
@@ -75,7 +86,15 @@ async def convert_files(
     create_job(job_id, "convert")
     
     # Dispatch to worker using thread pool
-    submit_task(convert_images_task, job_id, file_paths, target_format.lower())
+    submit_task(
+        convert_images_task,
+        job_id,
+        file_paths,
+        target_format.lower(),
+        resize_width,
+        resize_height,
+        keep_aspect
+    )
     
     return {
         "job_id": job_id,
