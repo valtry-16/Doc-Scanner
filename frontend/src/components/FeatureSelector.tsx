@@ -26,8 +26,13 @@ export default function FeatureSelector({ feature, onOptionsChange }: FeatureSel
       <div className="bg-white p-6 rounded-lg border border-gray-200">
         <h3 className="text-lg font-semibold mb-4">Conversion Options</h3>
         <p className="text-sm text-gray-600 mb-4">
-          📷 Convert images to JPG, PNG, WebP, or PDF
+          📷 Convert between formats:
         </p>
+        <ul className="text-sm text-gray-600 mb-4 space-y-1 list-disc list-inside">
+          <li>Image → Image (JPG, PNG, WebP)</li>
+          <li>Images → PDF (combine multiple images)</li>
+          <li>PDF → Images (extract each page)</li>
+        </ul>
         <div className="space-y-3">
           <label className="block">
             <span className="text-sm font-medium text-gray-700">Target Format:</span>

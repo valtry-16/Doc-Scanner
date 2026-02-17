@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     TASK_TIMEOUT: int = 300  # 5 minutes
     
     # CORS Settings
-    CORS_ORIGINS: Union[List[str], str] = "http://localhost:3000"
+    CORS_ORIGINS: Union[List[str], str] = "http://localhost:3000,https://doc-scanner-eight.vercel.app"
     
     @field_validator('CORS_ORIGINS', mode='before')
     @classmethod

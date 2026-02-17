@@ -1,5 +1,5 @@
 import os
-from utils.image_utils import compress_image, convert_image
+from utils.image_utils import compress_image, convert_image, pdf_to_images
 from utils.logger import log_job
 from core.job_manager import set_job_status, set_job_result, set_job_error, JobStatus
 from core.temp_storage import get_output_path
@@ -70,15 +70,15 @@ def compress_images_task(job_id: str, file_paths: list, quality: int = 85):
 
 def convert_images_task(job_id: str, file_paths: list, target_format: str):
     """
-    Convert images to target format
+    Convert images/PDFs to target format
     
     Args:
         job_id: Job ID
         file_paths: List of file paths to convert
-        target_format: Target format (jpg, png, webp)
+        target_format: Target format (jpg, png, webp, pdf)
     """
     try:
-        log_job(job_id, f"Starting conversion of {len(file_paths)} images to {target_format}")
+        log_job(job_id, f"Starting conversion of {len(file_paths)} file(s) to {target_format}")
         set_job_status(job_id, JobStatus.PROCESSING, 0)
         
         output_files = []
@@ -86,17 +86,38 @@ def convert_images_task(job_id: str, file_paths: list, target_format: str):
         
         for idx, file_path in enumerate(file_paths):
             base_name = os.path.splitext(os.path.basename(file_path))[0]
-            output_filename = f"{base_name}.{target_format}"
-            output_path = get_output_path(job_id, output_filename)
+            file_ext = os.path.splitext(file_path)[1].lower()
             
-            success, message = convert_image(file_path, output_path, target_format)
-            
-            if success:
-                output_files.append(output_filename)
-                progress = int(((idx + 1) / total_files) * 100)
-                set_job_status(job_id, JobStatus.PROCESSING, progress)
+            # Handle PDF to image conversion
+            if file_ext == '.pdf' and target_format.lower() != 'pdf':
+                output_dir = os.path.dirname(get_output_path(job_id, "temp"))
+                success, message, pdf_output_files = pdf_to_images(
+                    file_path, 
+                    output_dir, 
+                    target_format
+                )
+                
+                if success:
+                    # Get just the filenames from full paths
+                    for pdf_file in pdf_output_files:
+                        output_files.append(os.path.basename(pdf_file))
+                else:
+                    log_job(job_id, f"Failed to convert PDF {base_name}: {message}", "error")
+                    # Don't fail the whole job, just skip this file
             else:
-                log_job(job_id, f"Failed to convert {base_name}: {message}", "error")
+                # Regular image conversion
+                output_filename = f"{base_name}.{target_format}"
+                output_path = get_output_path(job_id, output_filename)
+                
+                success, message = convert_image(file_path, output_path, target_format)
+                
+                if success:
+                    output_files.append(output_filename)
+                else:
+                    log_job(job_id, f"Failed to convert {base_name}: {message}", "error")
+            
+            progress = int(((idx + 1) / total_files) * 100)
+            set_job_status(job_id, JobStatus.PROCESSING, progress)
         
         if not output_files:
             raise Exception("No files were successfully converted")
@@ -106,11 +127,12 @@ def convert_images_task(job_id: str, file_paths: list, target_format: str):
         result = {
             "download_url": f"/downloads/{job_id}/{result_filename}",
             "filename": result_filename,
-            "file_size": os.path.getsize(get_output_path(job_id, result_filename))
+            "file_size": os.path.getsize(get_output_path(job_id, result_filename)),
+            "total_files": len(output_files)
         }
         
         set_job_result(job_id, result)
-        log_job(job_id, "Conversion completed successfully")
+        log_job(job_id, f"Conversion completed successfully - {len(output_files)} file(s) created")
         
     except Exception as e:
         log_job(job_id, f"Conversion failed: {str(e)}", "error")

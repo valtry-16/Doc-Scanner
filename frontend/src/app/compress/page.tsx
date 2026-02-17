@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import FileUploader from '@/components/FileUploader';
 import FeatureSelector from '@/components/FeatureSelector';
+import CompressionPreview from '@/components/CompressionPreview';
 import JobProgress from '@/components/JobProgress';
 import DownloadButton from '@/components/DownloadButton';
 import ErrorAlert from '@/components/ErrorAlert';
@@ -81,6 +82,10 @@ export default function CompressPage() {
             
             {files.length > 0 && (
               <FeatureSelector feature="compress" onOptionsChange={setOptions} />
+            )}
+            
+            {files.length > 0 && files[0] && (
+              <CompressionPreview file={files[0]} quality={options.quality || 85} />
             )}
             
             {files.length > 0 && (

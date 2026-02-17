@@ -18,7 +18,10 @@ async def convert_files(
     target_format: str = Form(...)
 ):
     """
-    Convert uploaded images to target format (JPG, PNG, WebP, PDF)
+    Convert uploaded images/PDFs to target format
+    - Image to Image: JPG, PNG, WebP
+    - Image to PDF: Multiple images → Single PDF
+    - PDF to Image: Each page → Separate image (JPG, PNG, WebP)
     """
     logger.info(f"Convert endpoint called with {len(files)} files, target format: {target_format}")
     
@@ -33,21 +36,23 @@ async def convert_files(
             detail=f"Unsupported target format. Supported: {', '.join(supported_formats)}"
         )
     
-    # Validate file types first - only images allowed for conversion
+    # Validate file types - both images and PDFs are allowed
     for file in files:
         logger.info(f"Validating file: {file.filename}, content_type: {file.content_type}")
         
-        # Check if it's an image by content type or extension
         ext = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
         is_image = (
             file.content_type and file.content_type.startswith('image/') or
             ext in ['jpg', 'jpeg', 'png', 'webp']
         )
+        is_pdf = (
+            file.content_type == 'application/pdf' or ext == 'pdf'
+        )
         
-        if not is_image:
+        if not (is_image or is_pdf):
             raise HTTPException(
                 status_code=400, 
-                detail=f"File '{file.filename}' is not an image. Only JPG, PNG, and WebP images are supported for conversion."
+                detail=f"File '{file.filename}' is not supported. Only images (JPG, PNG, WebP) and PDFs are supported."
             )
         
         # Now do general validation
@@ -63,17 +68,14 @@ async def convert_files(
     job_dir = create_job_directory(job_id)
     file_paths = await save_upload_files(files, job_dir)
     
-    # Filter image files
-    image_paths = [p for p in file_paths if is_image_file(p)]
-    
-    if not image_paths:
-        raise HTTPException(status_code=400, detail="No valid image files found after upload.")
+    if not file_paths:
+        raise HTTPException(status_code=400, detail="No valid files found after upload.")
     
     # Create job
     create_job(job_id, "convert")
     
     # Dispatch to worker using thread pool
-    submit_task(convert_images_task, job_id, image_paths, target_format.lower())
+    submit_task(convert_images_task, job_id, file_paths, target_format.lower())
     
     return {
         "job_id": job_id,
