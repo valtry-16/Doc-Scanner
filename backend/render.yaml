@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: document-processor-api
+    env: python
+    region: oregon  # Choose: oregon, frankfurt, singapore, ohio, etc.
+    plan: free  # Change to 'starter' for production (always-on, $7/mo)
+    buildCommand: |
+      apt-get update
+      apt-get install -y tesseract-ocr tesseract-ocr-eng poppler-utils libpoppler-cpp-dev
+      pip install --no-cache-dir -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1
+    healthCheckPath: /health
+    envVars:
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: OUTPUT_DIR
+        value: /tmp/output
+      - key: MAX_FILE_SIZE_MB
+        value: 25
+      - key: FILE_RETENTION_MINUTES
+        value: 30
+      - key: MAX_WORKERS
+        value: 2  # Adjust based on plan (free: 2, starter: 4)
+      - key: TASK_TIMEOUT
+        value: 300
+      - key: CORS_ORIGINS
+        value: https://your-app.vercel.app  # UPDATE THIS after deploying frontend
+      - key: DEBUG
+        value: false
+      - key: LOG_LEVEL
+        value: INFO

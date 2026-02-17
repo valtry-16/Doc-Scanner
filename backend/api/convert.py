@@ -1,0 +1,81 @@
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
+from typing import List
+import uuid
+from core.validators import validate_upload_file
+from core.temp_storage import save_upload_files, create_job_directory
+from core.job_manager import create_job
+from core.file_detector import is_image_file
+from core.task_processor import submit_task
+from workers.image_worker import convert_images_task
+from utils.logger import logger
+
+router = APIRouter()
+
+
+@router.post("/convert")
+async def convert_files(
+    files: List[UploadFile] = File(...),
+    target_format: str = Form(...)
+):
+    """
+    Convert uploaded images to target format (JPG, PNG, WebP, PDF)
+    """
+    logger.info(f"Convert endpoint called with {len(files)} files, target format: {target_format}")
+    
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+    
+    # Validate target format
+    supported_formats = ['jpg', 'jpeg', 'png', 'webp', 'pdf']
+    if target_format.lower() not in supported_formats:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported target format. Supported: {', '.join(supported_formats)}"
+        )
+    
+    # Validate file types first - only images allowed for conversion
+    for file in files:
+        logger.info(f"Validating file: {file.filename}, content_type: {file.content_type}")
+        
+        # Check if it's an image by content type or extension
+        ext = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
+        is_image = (
+            file.content_type and file.content_type.startswith('image/') or
+            ext in ['jpg', 'jpeg', 'png', 'webp']
+        )
+        
+        if not is_image:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"File '{file.filename}' is not an image. Only JPG, PNG, and WebP images are supported for conversion."
+            )
+        
+        # Now do general validation
+        valid, error = validate_upload_file(file)
+        if not valid:
+            logger.error(f"File validation failed: {error}")
+            raise HTTPException(status_code=400, detail=error)
+    
+    # Generate job ID
+    job_id = str(uuid.uuid4())
+    
+    # Create job directory and save files
+    job_dir = create_job_directory(job_id)
+    file_paths = await save_upload_files(files, job_dir)
+    
+    # Filter image files
+    image_paths = [p for p in file_paths if is_image_file(p)]
+    
+    if not image_paths:
+        raise HTTPException(status_code=400, detail="No valid image files found after upload.")
+    
+    # Create job
+    create_job(job_id, "convert")
+    
+    # Dispatch to worker using thread pool
+    submit_task(convert_images_task, job_id, image_paths, target_format.lower())
+    
+    return {
+        "job_id": job_id,
+        "message": f"Conversion job started for {len(files)} file(s)"
+    }

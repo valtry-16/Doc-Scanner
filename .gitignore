@@ -1,0 +1,60 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.vercel
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.development
+
+# Temporary files
+backend/temp_uploads/
+backend/temp_output/
+backend/jobs.json
+*.tmp
+*.temp
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
+logs/
+celerybeat-schedule
+celerybeat.pid
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Build
+dist/
+build/
+*.egg-info/
+
+# Redis
+dump.rdb
+
+# OS
+Thumbs.db
+.DS_Store
