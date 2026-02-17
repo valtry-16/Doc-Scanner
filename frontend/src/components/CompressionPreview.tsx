@@ -121,6 +121,8 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
   const savingsPercent = originalSize > 0 
     ? Math.round(((originalSize - compressedSize) / originalSize) * 100) 
     : 0;
+  const estimatedFinalSize = compressedSize > 0 ? formatFileSize(compressedSize) : '...';
+  const estimatedSavings = compressedSize > 0 ? formatFileSize(originalSize - compressedSize) : '...';
 
   if (!file || !file.type.startsWith('image/')) {
     return null;
@@ -129,6 +131,14 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
   return (
     <div className="bg-white p-6 rounded-lg border border-gray-200">
       <h3 className="text-lg font-semibold mb-4">Live Preview</h3>
+
+      <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium text-gray-700">Quality: {quality}%</span>
+          <span className="text-sm text-gray-600">Estimated final size: {estimatedFinalSize}</span>
+          <span className="text-sm text-gray-600">Estimated savings: {estimatedSavings} ({savingsPercent}%)</span>
+        </div>
+      </div>
       
       <div className="grid md:grid-cols-2 gap-4">
         {/* Original */}
@@ -182,7 +192,7 @@ export default function CompressionPreview({ file, quality }: CompressionPreview
             </span>
           </div>
           <div className="mt-1 text-xs text-green-700">
-            {formatFileSize(originalSize - compressedSize)} saved
+            {estimatedSavings} saved
           </div>
         </div>
       )}
