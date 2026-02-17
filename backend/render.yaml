@@ -1,12 +1,14 @@
 services:
   - type: web
     name: document-processor-api
-    env: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: ./
-    region: oregon  # Choose: oregon, frankfurt, singapore, ohio, etc.
-    plan: free  # Change to 'starter' for production (always-on, $7/mo)
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
+    # Note: OCR feature requires paid tier for tesseract-ocr installation
+    # Or use Render Native Environment (paid feature)
     envVars:
       - key: UPLOAD_DIR
         value: /tmp/uploads
